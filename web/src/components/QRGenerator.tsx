@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import ModuleCell from './common/ModuleCell';
 import PrimaryButton from './common/PrimaryButton';
 import IconButton from './common/IconButton';
@@ -6,6 +6,7 @@ import StageButton from './common/StageButton';
 import { FaLongArrowAltLeft, FaLongArrowAltRight } from "react-icons/fa";
 import CollapsibleSection from './common/CollapsibleSection';
 import { generateQR as callGenerateQR } from '../tools/api';
+import AnimatedQRCanvas from './common/AnimatedQRCanvas';
 
 interface QRResponse {
   intermediate_stages: {
@@ -24,6 +25,16 @@ interface QRResponse {
   debug_logs: string;
 }
 
+const stages = [
+  'Format Bits',
+  'Timing Patterns',
+  'Finder Patterns',
+  'Alignment Patterns',
+  'Version Information',
+  'Data Placement',
+  'Final QR Code'
+];
+
 export function QRGenerator() {
   const [text, setText] = useState('');
   const [currentStage, setCurrentStage] = useState(0);
@@ -34,16 +45,6 @@ export function QRGenerator() {
   const [errorCorrection, setErrorCorrection] = useState('L');
   const [mask, setMask] = useState<number>(-1);
   const [mode, setMode] = useState('auto');
-
-  const stages = [
-    'Format Bits',
-    'Timing Patterns',
-    'Finder Patterns',
-    'Alignment Patterns',
-    'Version Information',
-    'Data Placement',
-    'Final QR Code'
-  ];
 
   const generateQR = async () => {
     try {
@@ -109,7 +110,9 @@ export function QRGenerator() {
     link.click();
   };
 
-  const currentMatrix = getMatrixForStage(currentStage);
+  const currentMatrix = useMemo(() => getMatrixForStage(currentStage), [qrData, currentStage]);
+  const previousMatrix = useMemo(() => currentStage > 0 ? getMatrixForStage(currentStage - 1) : null, [qrData, currentStage]);
+  const hasNoChange = useMemo(() => previousMatrix && currentMatrix && JSON.stringify(previousMatrix.modules) === JSON.stringify(currentMatrix.modules), [previousMatrix, currentMatrix]);
 
   return (
     <div className="max-w-5xl mx-auto flex flex-col gap-y-4">
@@ -231,28 +234,26 @@ export function QRGenerator() {
                 <FaLongArrowAltRight />
               </IconButton>
             </div>
-            <div
-              className="grid gap-0 bg-white p-4 rounded-lg mt-4 aspect-square"
-              style={{ 
-                gridTemplateColumns: `repeat(${qrData.size}, 1fr)`,
-                gridTemplateRows: `repeat(${qrData.size}, 1fr)`
-              }}
-            >
-              {currentMatrix?.modules.map((row, i) =>
-                row.map((cell, j) => (
-                  <div key={`${i}-${j}`} className="aspect-square">
-                    <ModuleCell cell={!!cell} />
-                  </div>
-                ))
-              )}
-            </div>
-            {currentStage > 0 && (() => {
-              const previousMatrix = getMatrixForStage(currentStage - 1);
-              if (previousMatrix && currentMatrix && JSON.stringify(previousMatrix.modules) === JSON.stringify(currentMatrix.modules)) {
-                return <p className="mt-2 text-center text-sm text-gray-600">No modules have changed in this step</p>;
-              }
-              return null;
-            })()}
+            {qrData.size > 50 ? (
+              <AnimatedQRCanvas matrix={currentMatrix} size={qrData.size} />
+            ) : (
+              <div
+                className="grid gap-0 bg-white p-4 rounded-lg mt-4 aspect-square"
+                style={{ 
+                  gridTemplateColumns: `repeat(${qrData.size}, 1fr)`,
+                  gridTemplateRows: `repeat(${qrData.size}, 1fr)`
+                }}
+              >
+                {currentMatrix?.modules.map((row, i) =>
+                  row.map((cell, j) => (
+                    <div key={`${i}-${j}`} className="aspect-square">
+                      <ModuleCell cell={!!cell} />
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+            {hasNoChange && <p className="mt-2 text-center text-sm text-gray-600">No modules have changed in this step</p>}
             {currentStage === stages.length - 1 && (
               <PrimaryButton className="mt-4" onClick={exportQRCodeImage}>
                 Export as Image

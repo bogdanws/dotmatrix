@@ -1,11 +1,11 @@
 import { useState, ChangeEvent } from 'react';
-import ModuleCell from './common/ModuleCell';
 import PrimaryButton from './common/PrimaryButton';
 import IconButton from './common/IconButton';
 import StageButton from './common/StageButton';
 import { decodeQR as callDecodeQR } from '../tools/api';
 import { FaLongArrowAltLeft, FaLongArrowAltRight } from 'react-icons/fa';
 import CollapsibleSection from './common/CollapsibleSection';
+import AnimatedQRCanvas from './common/AnimatedQRCanvas';
 
 // Define the interface for the decode response
 interface QRDecodeResponse {
@@ -55,37 +55,27 @@ export function QRDecode() {
     }
   };
 
-  // Add helper functions to render the stage content
-  const renderMatrix = (matrix: number[][]) => {
-    if (!matrix || matrix.length === 0 || matrix[0].length === 0) {
-      return <p className="text-center text-gray-700">Matrix data not available</p>;
-    }
-    return (
-      <div
-        className="grid gap-0 bg-white p-4 rounded-lg mt-4 aspect-square"
-        style={{
-          gridTemplateColumns: `repeat(${matrix[0].length}, 1fr)`,
-          gridTemplateRows: `repeat(${matrix.length}, 1fr)`
-        }}
-      >
-        {matrix.map((row, i) =>
-          row.map((cell, j) => (
-            <div key={`${i}-${j}`} className="aspect-square">
-              <ModuleCell cell={!!cell} />
-            </div>
-          ))
-        )}
-      </div>
-    );
-  };
-
   const getStageContent = () => {
     if (!decodeData) return null;
     switch (currentStage) {
-      case 0:
-        return renderMatrix(decodeData.intermediate_stages.initial_matrix);
-      case 1:
-        return renderMatrix(decodeData.intermediate_stages.unmasked_matrix);
+      case 0: {
+        const matrix = decodeData.intermediate_stages.initial_matrix;
+        return (
+          <AnimatedQRCanvas
+            matrix={{ modules: matrix, isfunction: matrix.map(row => row.map(() => false)) }}
+            size={matrix.length}
+          />
+        );
+      }
+      case 1: {
+        const matrix = decodeData.intermediate_stages.unmasked_matrix;
+        return (
+          <AnimatedQRCanvas
+            matrix={{ modules: matrix, isfunction: matrix.map(row => row.map(() => false)) }}
+            size={matrix.length}
+          />
+        );
+      }
       case 2:
         return (
           <div className="p-4 space-y-2">
