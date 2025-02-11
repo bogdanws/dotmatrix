@@ -10,7 +10,8 @@ function App() {
     <main className="min-h-screen min-w-full flex flex-col items-center bg-gradient-to-br from-gray-100 to-gray-200">
       <div className="container mx-auto px-4 py-12">
         <header className="mb-8 text-center">
-          <h1 className="text-4xl font-extrabold text-gray-900">DotMatrix - Step by Step QR Code Generator & Decoder</h1>
+          <h1 className="text-4xl font-extrabold text-gray-900">DotMatrix</h1>
+          <p className="text-gray-600">Step by Step QR Code Generator & Decoder</p>
         </header>
         <div className="flex justify-center space-x-4 mb-8">
           <button
