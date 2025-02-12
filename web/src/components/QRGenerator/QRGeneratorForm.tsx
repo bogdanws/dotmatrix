@@ -64,7 +64,7 @@ export function QRGeneratorForm({ onGenerate, isGenerating }: QRGeneratorFormPro
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}
             transition={{ duration: 0.3 }}
-            className="grid grid-cols-1 md:grid-cols-2 gap-4 overflow-hidden"
+            className="grid grid-cols-1 md:grid-cols-2 gap-4 overflow-y-hidden px-1"
           >
             <div>
               <label className="block text-sm font-medium text-gray-900 mb-2">
