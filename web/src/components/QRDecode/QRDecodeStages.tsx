@@ -38,13 +38,13 @@ export function QRDecodeStages({
             <div><strong>Data Capacity:</strong> {stageContent.data.dataCapacity}</div>
             <div>
               <strong>Data Bits Extracted:</strong>
-              <div className="bg-gray-100 p-2 rounded break-words">
+              <div className="max-h-[200px] overflow-y-auto bg-gray-100 p-2 rounded break-words">
                 {stageContent.data.dataBitsExtracted}
               </div>
             </div>
             <div>
               <strong>Data Bits Trimmed:</strong>
-              <div className="bg-gray-100 p-2 rounded break-words">
+              <div className="max-h-[200px] overflow-y-auto bg-gray-100 p-2 rounded break-words">
                 {stageContent.data.dataBitsTrimmed}
               </div>
             </div>
