@@ -2,4 +2,5 @@ Flask
 Flask-Cors
 numpy
 Pillow
-matplotlib 
+matplotlib
+Flask-Limiter

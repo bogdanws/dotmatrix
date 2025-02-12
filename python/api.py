@@ -4,6 +4,8 @@ import tempfile
 import os
 
 from flask import Flask, request, jsonify, send_from_directory
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 import numpy as np
 from flask_cors import CORS
 
@@ -17,6 +19,20 @@ app = Flask(__name__,
             static_folder='../web/dist',  # Path to Vite build output
             static_url_path='')
 CORS(app)
+limiter = Limiter(
+    get_remote_address,
+    app=app,
+    default_limits=["300 per day", "75 per hour"]
+)
+
+@app.errorhandler(429)
+def ratelimit_handler(e):
+    response = jsonify({
+        "error": "Rate limit exceeded",
+        "message": "You have exceeded your request limit. Please try again in 1 hour."
+    })
+    response.status_code = 429
+    return response
 
 # Serve static files from Vite build
 @app.route('/')
@@ -121,8 +137,19 @@ class DebugQRCode(QRCode):
             #"isfunction": self.isfunction.tolist()
         }
 
+def calculate_cost():
+    """
+    Calculate the cost of a request based on the length of the 'data' field in the JSON payload.
+    For every 500 characters (or part thereof) in the payload, count as one request unit.
+    """
+    payload = request.get_json(silent=True) or {}
+    data_field = payload.get("data", "")
+    # Each 500 characters (rounded up) count as 1 cost unit.
+    return max(1, (len(data_field) + 499) // 500)
 
 @app.route('/api/generate', methods=['POST'])
+@limiter.limit("300 per day", key_func=get_remote_address, cost=calculate_cost)
+@limiter.limit("75 per hour", key_func=get_remote_address, cost=calculate_cost)
 def generate_qr():
     # Parse JSON input
     data_payload = request.get_json()
@@ -208,6 +235,8 @@ class DebugQRDecode(QRDecode):
 
 # Update the decode_qr endpoint to use DebugQRDecode
 @app.route('/api/decode', methods=['POST'])
+@limiter.limit("300 per day", key_func=get_remote_address, cost=calculate_cost)
+@limiter.limit("75 per hour", key_func=get_remote_address, cost=calculate_cost)
 def decode_qr():
     if 'image' not in request.files:
         return jsonify({"error": "Missing image file"}), 400
