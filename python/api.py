@@ -25,8 +25,12 @@ Compress(app)
 limiter = Limiter(
     get_remote_address,
     app=app,
-    default_limits=["300 per day", "75 per hour"]
+    default_limits=["300 per day", "75 per hour"],
+    storage_uri="memory://"
 )
+
+# Add exempt routes
+limiter.exempt(app.route('/'))
 
 @app.errorhandler(429)
 def ratelimit_handler(e):
@@ -45,9 +49,15 @@ def serve_frontend():
 # Catch-all route to handle client-side routing
 @app.route('/<path:path>')
 def serve_static(path):
+    # First try to serve actual static files
     if os.path.exists(os.path.join(app.static_folder, path)):
         return send_from_directory(app.static_folder, path)
+    # For all other routes, serve index.html to support client-side routing
     return send_from_directory(app.static_folder, 'index.html')
+
+@app.errorhandler(404)
+def not_found(e):
+    return app.send_static_file('index.html')
 
 # Helper function to convert numpy types to native Python types for JSON serialization
 def convert_numpy(obj):
