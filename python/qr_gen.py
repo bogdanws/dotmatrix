@@ -349,68 +349,62 @@ class QRCode:
             self._draw_format_bits(self.mask)  # Draw final format bits
 
     def _add_timing_patterns(self):
-        """Add the timing pattern - alternating dark/light modules"""
+        """Add the timing pattern - alternating dark/light modules using vectorized operations."""
         # horizontal timing pattern
-        for i in range(0, self.size):
-            self.modules[6, i] = (i+1) % 2
-            self.isfunction[6, i] = True
+        self.modules[6, :] = (np.arange(self.size) + 1) % 2
+        self.isfunction[6, :] = True
 
         # vertical timing pattern
-        for i in range(0, self.size):
-            self.modules[i, 6] = (i+1) % 2
-            self.isfunction[i, 6] = True
+        self.modules[:, 6] = (np.arange(self.size) + 1) % 2
+        self.isfunction[:, 6] = True
 
     def _add_finder_patterns(self):
-        """Add the three finder patterns with separators"""
-        # Helper function to add a finder pattern at given position
-        def add_finder_pattern(row, col):
-            # Add the 7x7 finder pattern
-            for r in range(-3, 4):
-                for c in range(-3, 4):
-                    # Create the pattern: 3x3 black square inside 5x5 white square inside 7x7 black border
-                    is_border = abs(r) == 3 or abs(c) == 3
-                    is_inner = abs(r) <= 1 and abs(c) <= 1
-                    self.modules[row + r, col + c] = 1 if (is_border or is_inner) else 0
-                    self.isfunction[row + r, col + c] = True
-            
-            # Add separator (white border)
-            for r in range(-4, 5):
-                for c in range(-4, 5):
-                    if abs(r) == 4 or abs(c) == 4:
-                        if 0 <= row + r < self.size and 0 <= col + c < self.size:
-                            self.modules[row + r, col + c] = 0
-                            self.isfunction[row + r, col + c] = True
-
-        # Add finder patterns at the three corners
-        add_finder_pattern(3, 3)  # Top-left
-        add_finder_pattern(3, self.size - 4)  # Top-right
-        add_finder_pattern(self.size - 4, 3)  # Bottom-left
+        """Add the three finder patterns with separators using cached indices."""
+        # Precompute offsets for the 7x7 finder pattern
+        finder_offsets = np.array([(r, c) for r in range(-3, 4) for c in range(-3, 4)])
+        # Create mask: dark if border (abs(r)==3 or abs(c)==3) or inner 3x3 center (abs(r)<=1)
+        border_mask = (np.abs(finder_offsets[:, 0]) == 3) | (np.abs(finder_offsets[:, 1]) == 3)
+        inner_mask = (np.abs(finder_offsets[:, 0]) <= 1) & (np.abs(finder_offsets[:, 1]) <= 1)
+        finder_pattern_values = np.where(border_mask | inner_mask, 1, 0)
+        
+        # Precompute offsets for 9x9 separator (white border)
+        separator_offsets = np.array([(r, c) for r in range(-4, 5) for c in range(-4, 5)])
+        # For separator, we want to clear (set 0) only the border:
+        separator_mask = (np.abs(separator_offsets[:, 0]) == 4) | (np.abs(separator_offsets[:, 1]) == 4)
+        
+        for (r0, c0) in [(3, 3), (3, self.size - 4), (self.size - 4, 3)]:
+            # Apply finder pattern
+            for offset, value in zip(finder_offsets, finder_pattern_values):
+                r = r0 + offset[0]
+                c = c0 + offset[1]
+                self.modules[r, c] = value
+                self.isfunction[r, c] = True
+            # Apply separator
+            for offset in separator_offsets:
+                r = r0 + offset[0]
+                c = c0 + offset[1]
+                if (abs(offset[0]) == 4 or abs(offset[1]) == 4) and 0 <= r < self.size and 0 <= c < self.size:
+                    self.modules[r, c] = 0
+                    self.isfunction[r, c] = True
 
     def _add_alignment_patterns(self):
-        """Add alignment patterns in standard positions, skipping finder corners"""
-        # Get alignment pattern positions for current version
-        if self.version < 2:  # Version 1 has no alignment patterns
+        """Add alignment patterns in standard positions, using vectorized assignment for 5x5 blocks."""
+        if self.version < 2:
             return
-            
         positions = self.ALIGNMENT_POSITIONS[self.version]
+        # Precompute a 5x5 alignment pattern: border if abs(r)==2 or abs(c)==2, center always dark
+        rp, cp = np.meshgrid(np.arange(-2, 3), np.arange(-2, 3), indexing='ij')
+        alignment_pattern = np.where((np.abs(rp) == 2) | (np.abs(cp) == 2) | ((rp == 0) & (cp == 0)), 1, 0)
         
-        # Add alignment patterns at all intersections of positions
         for row in positions:
             for col in positions:
                 # Skip if too close to finder patterns
-                if ((row <= 8 and col <= 8) or      # Top-left
-                    (row <= 8 and col >= self.size - 9) or    # Top-right
-                    (row >= self.size - 9 and col <= 8)):      # Bottom-left
+                if ((row <= 8 and col <= 8) or (row <= 8 and col >= self.size - 9) or (row >= self.size - 9 and col <= 8)):
                     continue
-                    
-                # Add 5x5 alignment pattern
-                for r in range(-2, 3):
-                    for c in range(-2, 3):
-                        # Create pattern: single black center, white square, black border
-                        is_border = abs(r) == 2 or abs(c) == 2
-                        is_center = r == 0 and c == 0
-                        self.modules[row + r, col + c] = 1 if (is_border or is_center) else 0
-                        self.isfunction[row + r, col + c] = True
+                rows = np.arange(row - 2, row + 3)
+                cols = np.arange(col - 2, col + 3)
+                self.modules[np.ix_(rows, cols)] = alignment_pattern
+                self.isfunction[np.ix_(rows, cols)] = True
 
     def _add_temporary_format_bits(self):
         """Add dummy format information bits (will be replaced later)"""
@@ -727,11 +721,6 @@ class QRCode:
             if self.debug:
                 print(f"Mode: {mode} (indicator: {mode_indicator[mode]})")
 
-            # Check if data fits within capacity
-            if (total_capacity // 8) < len(self.data):
-                raise ValueError(f'Data length exceeds maximum capacity of {total_capacity // 8} bytes for version {self.version} and error correction level {self.error_correction}')
-
-            # Get character count bits based on version and mode
             from tokens import Mode as QRMode
             mode_enum = {
                 'numeric': QRMode.NUMERIC,
@@ -742,67 +731,57 @@ class QRCode:
             char_count_bits = self.get_mode_bits(mode_enum, self.version)
 
             # Convert data to binary based on mode
-            binary_data = ''
             if mode == 'numeric':
-                # Validate input is numeric
                 if not all(c.isdigit() for c in self.data):
                     raise ValueError('Data contains non-numeric characters')
-                # Process 3 digits at a time
+                num_bits = []
                 for i in range(0, len(self.data), 3):
                     chunk = self.data[i:i+3]
                     value = int(chunk)
                     if len(chunk) == 3:
-                        binary_data += format(value, '010b')  # 10 bits for 3 digits
+                        num_bits.append(format(value, '010b'))
                     elif len(chunk) == 2:
-                        binary_data += format(value, '07b')   # 7 bits for 2 digits
+                        num_bits.append(format(value, '07b'))
                     else:
-                        binary_data += format(value, '04b')   # 4 bits for 1 digit
+                        num_bits.append(format(value, '04b'))
+                binary_data = ''.join(num_bits)
             elif mode == 'alphanumeric':
-                # Validate input is alphanumeric
                 valid_chars = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ $%*+-./:'
                 if not all(c in valid_chars for c in self.data.upper()):
                     raise ValueError('Data contains invalid alphanumeric characters')
-                # Convert data to uppercase for processing
                 data = self.data.upper()
-                # Process 2 characters at a time
+                alpha_bits = []
                 for i in range(0, len(data), 2):
                     if i + 1 < len(data):
                         char1 = self._alphanumeric_value(data[i])
                         char2 = self._alphanumeric_value(data[i + 1])
                         value = char1 * 45 + char2
-                        binary_data += format(value, '011b')  # 11 bits for 2 chars
+                        alpha_bits.append(format(value, '011b'))
                     else:
                         char1 = self._alphanumeric_value(data[i])
-                        binary_data += format(char1, '06b')   # 6 bits for 1 char
+                        alpha_bits.append(format(char1, '06b'))
+                binary_data = ''.join(alpha_bits)
             elif mode == 'kanji':
+                kanji_bits = []
                 for char in self.data:
                     try:
                         value = self._encode_kanji(char)
-                        binary_data += format(value, '013b')
+                        kanji_bits.append(format(value, '013b'))
                     except ValueError as e:
                         if self.debug:
                             print(f"Warning: {e}, falling back to UTF-8 encoding")
-                        # Fall back to byte mode for this character
-                        utf8_bytes = char.encode('utf-8')
-                        for b in utf8_bytes:
-                            binary_data += format(b, '08b')
-            else:
-                # UTF-8 encode the data for byte mode
-                utf8_bytes = self.data.encode('utf-8')
-                for b in utf8_bytes:
-                    binary_data += format(b, '08b')
+                        for b in char.encode('utf-8'):
+                            kanji_bits.append(format(b, '08b'))
+                binary_data = ''.join(kanji_bits)
+            elif mode == 'byte':
+                binary_data = ''.join(format(b, '08b') for b in self.data.encode('utf-8'))
 
+            bytes_count = format(len(self.data), f'0{char_count_bits}b')
+            data_bits = mode_indicator[mode] + bytes_count + binary_data
             if self.debug:
                 print(f"Data length: {len(self.data)} {'characters' if mode == 'kanji' else 'bytes'}")
                 print(f"Binary data: {binary_data}")
-
-            bytes_count = format(len(self.data), f'0{char_count_bits}b')
-            if self.debug:
                 print(f"Character count indicator ({char_count_bits} bits): {bytes_count}")
-
-            # Add mode indicator, character count, and data bits
-            data_bits = mode_indicator[mode] + bytes_count + binary_data
-            if self.debug:
                 print(f"\nInitial data bits: {data_bits}")
                 print(f"Initial data length: {len(data_bits)} bits")
 
@@ -914,28 +893,29 @@ class QRCode:
         return self.modules
 
     def _apply_mask(self, mask: int) -> None:
-        """Apply the specified mask pattern to the QR code."""
-
+        """Apply the specified mask pattern to the QR code using vectorized operations."""
         if not 0 <= mask <= 7:
             raise ValueError("Mask value out of range")
-        
-        # Mask patterns (x and y are module coordinates)
-        patterns = [
-            lambda x, y: (x + y) % 2 == 0,                    # 000
-            lambda x, y: y % 2 == 0,                          # 001
-            lambda x, y: x % 3 == 0,                          # 010
-            lambda x, y: (x + y) % 3 == 0,                    # 011
-            lambda x, y: ((y // 2) + (x // 3)) % 2 == 0,      # 100
-            lambda x, y: ((x * y) % 2 + (x * y) % 3) == 0,    # 101
-            lambda x, y: (((x * y) % 2) + ((x * y) % 3)) % 2 == 0,  # 110
-            lambda x, y: (((x + y) % 2) + ((x * y) % 3)) % 2 == 0,  # 111
-        ]
-        
-        # Apply mask to all non-function modules
-        for y in range(self.size):
-            for x in range(self.size):
-                if not self.isfunction[y][x]:
-                    self.modules[y][x] ^= patterns[mask](x, y)
+        X, Y = np.meshgrid(np.arange(self.size), np.arange(self.size))
+        if mask == 0:
+            pattern_bool = ((X + Y) % 2) == 0
+        elif mask == 1:
+            pattern_bool = (Y % 2) == 0
+        elif mask == 2:
+            pattern_bool = (X % 3) == 0
+        elif mask == 3:
+            pattern_bool = ((X + Y) % 3) == 0
+        elif mask == 4:
+            pattern_bool = (((Y // 2) + (X // 3)) % 2) == 0
+        elif mask == 5:
+            pattern_bool = (((X * Y) % 2 + (X * Y) % 3)) == 0
+        elif mask == 6:
+            pattern_bool = ((((X * Y) % 2) + ((X * Y) % 3)) % 2) == 0
+        elif mask == 7:
+            pattern_bool = (((X + Y) % 2 + (X * Y) % 3) % 2) == 0
+        # Apply mask only to non-function modules
+        non_function = ~self.isfunction
+        self.modules[non_function] ^= pattern_bool[non_function]
 
     def _get_penalty_score(self) -> int:
         """Calculate penalty score for a mask pattern based on QR code specification."""
@@ -948,72 +928,51 @@ class QRCode:
             run_length = 1
             run_score = 0
             prev_color = row[0]
-            
             for i in range(1, len(row)):
                 if row[i] == prev_color:
                     run_length += 1
                 else:
                     if run_length >= 5:
-                        run_score += 3 + (run_length - 5)  # 3 points for 5 modules, +1 for each additional
+                        run_score += 3 + (run_length - 5)
                     run_length = 1
                     prev_color = row[i]
-            
-            # Check final run
             if run_length >= 5:
                 run_score += 3 + (run_length - 5)
-            
             return run_score
 
-        # Check horizontal runs
         for y in range(size):
             score += count_runs(modules[y])
-
-        # Check vertical runs
         for x in range(size):
             score += count_runs(modules[:, x])
 
-        # Rule 2: 2×2 blocks of same color
-        box_score = 0
-        for y in range(size - 1):
-            for x in range(size - 1):
-                if modules[y, x] == modules[y, x+1] == modules[y+1, x] == modules[y+1, x+1]:
-                    box_score += 3
-
+        # Rule 2: 2×2 blocks of same color (vectorized)
+        block = (modules[:-1, :-1] == modules[:-1, 1:]) & (modules[:-1, :-1] == modules[1:, :-1]) & (modules[:-1, :-1] == modules[1:, 1:])
+        box_score = 3 * np.sum(block)
         score += box_score
 
         # Rule 3: Finder-like patterns
         finder_pattern = np.array([1, 0, 1, 1, 1, 0, 1])
         finder_score = 0
-
-        # Check horizontal finder patterns
         for y in range(size):
             for x in range(size - 6):
                 if np.array_equal(modules[y, x:x+7], finder_pattern):
                     finder_score += 40
-                # Check reverse pattern too
                 if np.array_equal(modules[y, x:x+7], finder_pattern[::-1]):
                     finder_score += 40
-
-        # Check vertical finder patterns
         for x in range(size):
             for y in range(size - 6):
                 if np.array_equal(modules[y:y+7, x], finder_pattern):
                     finder_score += 40
-                # Check reverse pattern too
                 if np.array_equal(modules[y:y+7, x], finder_pattern[::-1]):
                     finder_score += 40
-
         score += finder_score
 
         # Rule 4: Balance of dark/light modules
         dark_count = np.sum(modules)
         total = size * size
         dark_percentage = (dark_count * 100) / total
-        
-        # Calculate deviation from 50%
         deviation = abs(dark_percentage - 50)
-        balance_score = 10 * ((deviation + 4) // 5)  # Integer division by 5, then multiply by 10
-        
+        balance_score = 10 * ((deviation + 4) // 5)
         score += balance_score
 
         return score
