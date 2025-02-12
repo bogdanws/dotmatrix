@@ -52,10 +52,7 @@ export function QRDecodeStages({
         );
       case 'text':
         return (
-          <div className="p-4">
-            <p className="text-xl font-semibold mb-2">Decoded Text:</p>
-            <p className="text-lg break-words">{stageContent.data}</p>
-          </div>
+          <p className="text-lg break-words bg-blue-50 p-2 rounded">{stageContent.data}</p>
         );
       default:
         return null;
