@@ -137,7 +137,7 @@ class DebugQRCode(QRCode):
             #"isfunction": self.isfunction.tolist()
         }
 
-def calculate_cost():
+def calculate_generate_cost():
     """
     Calculate the cost of a request based on the length of the 'data' field in the JSON payload.
     For every 500 characters (or part thereof) in the payload, count as one request unit.
@@ -148,8 +148,8 @@ def calculate_cost():
     return max(1, (len(data_field) + 499) // 500)
 
 @app.route('/api/generate', methods=['POST'])
-@limiter.limit("300 per day", key_func=get_remote_address, cost=calculate_cost)
-@limiter.limit("75 per hour", key_func=get_remote_address, cost=calculate_cost)
+@limiter.limit("300 per day", key_func=get_remote_address, cost=calculate_generate_cost)
+@limiter.limit("75 per hour", key_func=get_remote_address, cost=calculate_generate_cost)
 def generate_qr():
     # Parse JSON input
     data_payload = request.get_json()
@@ -235,8 +235,8 @@ class DebugQRDecode(QRDecode):
 
 # Update the decode_qr endpoint to use DebugQRDecode
 @app.route('/api/decode', methods=['POST'])
-@limiter.limit("300 per day", key_func=get_remote_address, cost=calculate_cost)
-@limiter.limit("75 per hour", key_func=get_remote_address, cost=calculate_cost)
+@limiter.limit("150 per day", key_func=get_remote_address)
+@limiter.limit("30 per hour", key_func=get_remote_address)
 def decode_qr():
     if 'image' not in request.files:
         return jsonify({"error": "Missing image file"}), 400
