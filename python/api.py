@@ -162,22 +162,30 @@ def generate_qr():
     mask = data_payload.get('mask', -1)
     mode = data_payload.get('mode', 'auto')
 
-    # Capture debug logs during QR code generation
-    debug_buffer = io.StringIO()
-    with contextlib.redirect_stdout(debug_buffer):
-        # Create DebugQRCode with debug=True
-        qr = DebugQRCode(text, version=version, error_correction=error_correction, mask=mask, debug=True, mode=mode)
-    debug_output = debug_buffer.getvalue()
+    try:
+        # Capture debug logs during QR code generation
+        debug_buffer = io.StringIO()
+        with contextlib.redirect_stdout(debug_buffer):
+            # Create DebugQRCode with debug=True
+            qr = DebugQRCode(text, version=version, error_correction=error_correction, mask=mask, debug=True, mode=mode)
+        debug_output = debug_buffer.getvalue()
 
-    response = {
-        "intermediate_stages": qr.intermediate,
-        "version": qr.get_version(),
-        "error_correction": qr.get_error_correction(),
-        "mask": qr.get_mask(),
-        "size": qr.get_size(),
-        "debug_logs": debug_output
-    }
-    return jsonify(response)
+        response = {
+            "intermediate_stages": qr.intermediate,
+            "version": qr.get_version(),
+            "error_correction": qr.get_error_correction(),
+            "mask": qr.get_mask(),
+            "size": qr.get_size(),
+            "debug_logs": debug_output
+        }
+        return jsonify(response)
+    except Exception as e:
+        response = jsonify({
+            "error": "QR Generation Error",
+            "message": str(e)
+        })
+        response.status_code = 500
+        return response
 
 # Subclass to capture intermediate stages during QR code decoding
 class DebugQRDecode(QRDecode):
@@ -238,36 +246,44 @@ class DebugQRDecode(QRDecode):
 @limiter.limit("150 per day", key_func=get_remote_address)
 @limiter.limit("30 per hour", key_func=get_remote_address)
 def decode_qr():
-    if 'image' not in request.files:
-        return jsonify({"error": "Missing image file"}), 400
-    image_file = request.files['image']
+    try:
+        if 'image' not in request.files:
+            return jsonify({"error": "Missing image file"}), 400
+        image_file = request.files['image']
 
-    # Save the uploaded file to a temporary file on disk
-    with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp:
-        image_file.save(tmp.name)
-        tmp_file_path = tmp.name
+        # Save the uploaded file to a temporary file on disk
+        with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp:
+            image_file.save(tmp.name)
+            tmp_file_path = tmp.name
 
-    # Capture debug logs during image to matrix conversion
-    image_debug_buffer = io.StringIO()
-    with contextlib.redirect_stdout(image_debug_buffer):
-        binary_matrix = image_to_matrix(tmp_file_path, threshold=128, debug=True)
-    image_debug_output = image_debug_buffer.getvalue()
-    binary_matrix_list = binary_matrix.tolist() if hasattr(binary_matrix, 'tolist') else binary_matrix
+        # Capture debug logs during image to matrix conversion
+        image_debug_buffer = io.StringIO()
+        with contextlib.redirect_stdout(image_debug_buffer):
+            binary_matrix = image_to_matrix(tmp_file_path, threshold=128, debug=True)
+        image_debug_output = image_debug_buffer.getvalue()
+        binary_matrix_list = binary_matrix.tolist() if hasattr(binary_matrix, 'tolist') else binary_matrix
 
-    # Capture debug logs during QR decoding
-    decode_debug_buffer = io.StringIO()
-    with contextlib.redirect_stdout(decode_debug_buffer):
-        qr_decoder = DebugQRDecode(binary_matrix, debug=True)
-        decoded_text = qr_decoder.decode()
-    decode_debug_output = decode_debug_buffer.getvalue()
+        # Capture debug logs during QR decoding
+        decode_debug_buffer = io.StringIO()
+        with contextlib.redirect_stdout(decode_debug_buffer):
+            qr_decoder = DebugQRDecode(binary_matrix, debug=True)
+            decoded_text = qr_decoder.decode()
+        decode_debug_output = decode_debug_buffer.getvalue()
 
-    response = {
-        "intermediate_stages": qr_decoder.intermediate,
-        "qr_image_debug_logs": image_debug_output,
-        "qr_decode_debug_logs": decode_debug_output
-    }
-    response = convert_numpy(response)  # Convert any numpy types to native Python types
-    return jsonify(response)
+        response = {
+            "intermediate_stages": qr_decoder.intermediate,
+            "qr_image_debug_logs": image_debug_output,
+            "qr_decode_debug_logs": decode_debug_output
+        }
+        response = convert_numpy(response)  # Convert any numpy types to native Python types
+        return jsonify(response)
+    except Exception as e:
+        response = jsonify({
+            "error": "QR Decoding Error",
+            "message": str(e)
+        })
+        response.status_code = 500
+        return response
 
 
 if __name__ == '__main__':

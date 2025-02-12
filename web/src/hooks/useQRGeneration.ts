@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { generateQR } from '../tools/api';
 import { QRResponse, ErrorCorrectionLevel, QRMode, QRMatrix } from '../types/qr';
 import { GENERATOR_STAGES } from '../constants/qr';
+import { useError } from '../context/ErrorContext';
 
 interface UseQRGenerationProps {
   text: string;
@@ -15,7 +16,7 @@ export function useQRGeneration() {
   const [qrData, setQrData] = useState<QRResponse | null>(null);
   const [currentStage, setCurrentStage] = useState(0);
   const [isGenerating, setIsGenerating] = useState(false);
-
+  const { showError } = useError();
   const generateQRCode = async ({
     text,
     errorCorrection,
@@ -28,10 +29,15 @@ export function useQRGeneration() {
       setCurrentStage(0);
 
       const data = await generateQR(text, errorCorrection, version, mask, mode);
+      if ('error' in data) {
+        showError(data.error, data.message);
+        return;
+      }
       setQrData(data);
     } catch (error) {
       console.error('Error generating QR code:', error);
-      throw error;
+      const errorMessage = error instanceof Error ? error.message : 'Check the console for more details.';
+      showError('Error generating QR code', errorMessage);
     } finally {
       setIsGenerating(false);
     }

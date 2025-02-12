@@ -2,11 +2,12 @@ import { useState } from 'react';
 import { decodeQR } from '../tools/api';
 import { QRDecodeResponse, QRStageContent } from '../types/qr';
 import { DECODE_STAGES } from '../constants/qr';
-
+import { useError } from '../context/ErrorContext';
 export function useQRDecode() {
   const [decodeData, setDecodeData] = useState<QRDecodeResponse | null>(null);
   const [currentStage, setCurrentStage] = useState(0);
   const [isDecoding, setIsDecoding] = useState(false);
+  const { showError } = useError();
 
   const decodeQRCode = async (file: File) => {
     try {
@@ -15,10 +16,15 @@ export function useQRDecode() {
       setCurrentStage(0);
 
       const data = await decodeQR(file);
+      if ('error' in data) {
+        showError(data.error, data.message);
+        throw new Error(data.error);
+      }
       setDecodeData(data);
     } catch (error) {
       console.error('Error decoding QR code:', error);
-      throw error;
+      const errorMessage = error instanceof Error ? error.message : 'Check the console for more details.';
+      showError('Error decoding QR code', errorMessage);
     } finally {
       setIsDecoding(false);
     }
