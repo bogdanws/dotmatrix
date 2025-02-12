@@ -8,6 +8,7 @@ from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 import numpy as np
 from flask_cors import CORS
+from flask_compress import Compress
 
 # Import our QR modules
 from qr_gen import QRCode
@@ -19,6 +20,8 @@ app = Flask(__name__,
             static_folder='../web/dist',  # Path to Vite build output
             static_url_path='')
 CORS(app)
+Compress(app)
+
 limiter = Limiter(
     get_remote_address,
     app=app,
