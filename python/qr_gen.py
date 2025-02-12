@@ -1111,46 +1111,79 @@ class QRCode:
 
 class ReedSolomon:
     def __init__(self):
-        # GF(256) primitive polynomial x^8 + x^4 + x^3 + x^2 + 1
-        self.exp = [1] * 256  # Exponent table
-        self.log = [0] * 256  # Log table
+        # Initialize GF(256) using primitive polynomial x^8 + x^4 + x^3 + x^2 + 1
+        self.exp = np.empty(256, dtype=np.uint8)
+        self.log = np.empty(256, dtype=np.int16)
         
-        # Initialize exp & log tables
         x = 1
         for i in range(255):
             self.exp[i] = x
             self.log[x] = i
-            x = x << 1  # Multiply by x
-            if x & 0x100:  # Reduce by primitive polynomial
+            x = x << 1
+            if x & 0x100:
                 x ^= 0x11d
-    def multiply(self, x: int, y: int) -> int:
-        """Multiply in GF(256)"""
-        if x == 0 or y == 0:
-            return 0
-        return self.exp[(self.log[x] + self.log[y]) % 255]
-    def generate_ecc(self, data: bytes, ecc_words: int) -> bytes:
-        """Generate error correction codewords"""
-        # Initialize generator polynomial
-        generator = [1]
-        for i in range(ecc_words):
-            generator = self._multiply_polynomials(generator, [1, self.exp[i]])
+        # For convenience, set the last element (though not normally used in computations)
+        self.exp[255] = self.exp[0]
         
-        # Calculate ECC
-        remainder = list(data) + [0] * ecc_words
-        for i in range(len(data)):
+        # Precompute GF(256) multiplication table for fast lookups
+        self.gf_mult_table = np.zeros((256, 256), dtype=np.uint8)
+        for i in range(256):
+            for j in range(256):
+                if i == 0 or j == 0:
+                    self.gf_mult_table[i, j] = 0
+                else:
+                    self.gf_mult_table[i, j] = self.exp[(self.log[i] + self.log[j]) % 255]
+                    
+        # Cache for generator polynomials (keyed by ecc_words)
+        self.generator_cache = {}
+    
+    def multiply(self, x: int, y: int) -> int:
+        """Multiply in GF(256) using precomputed multiplication table."""
+        return int(self.gf_mult_table[x, y])
+    
+    def _multiply_polynomials(self, p1: list, p2: list) -> list:
+        """Multiply two polynomials in GF(256) using vectorized operations with NumPy."""
+        p1_arr = np.array(p1, dtype=np.uint8)
+        p2_arr = np.array(p2, dtype=np.uint8)
+        
+        # Compute outer product using precomputed GF multiplication table
+        outer = self.gf_mult_table[p1_arr[:, None], p2_arr[None, :]]
+        
+        result_length = len(p1) + len(p2) - 1
+        result = np.zeros(result_length, dtype=np.uint8)
+        
+        # XOR reduction along all anti-diagonals
+        for k in range(result_length):
+            acc = 0
+            for i in range(max(0, k - len(p2) + 1), min(k, len(p1) - 1) + 1):
+                j = k - i
+                acc ^= int(outer[i, j])
+            result[k] = acc
+        return result.tolist()
+    
+    def generate_ecc(self, data: bytes, ecc_words: int) -> bytes:
+        """Generate error correction codewords using optimized NumPy vectorized arithmetic and caching."""
+        # Use cached generator polynomial if available
+        if ecc_words not in self.generator_cache:
+            generator = [1]
+            for i in range(ecc_words):
+                generator = self._multiply_polynomials(generator, [1, int(self.exp[i])])
+            self.generator_cache[ecc_words] = generator
+        else:
+            generator = self.generator_cache[ecc_words]
+        
+        # Convert data to a numpy array for vectorized operations
+        remainder = np.array(list(data) + [0] * ecc_words, dtype=np.uint8)
+        data_len = len(data)
+        gen_len = len(generator)
+        
+        for i in range(data_len):
             factor = remainder[i]
             if factor != 0:
-                for j in range(1, len(generator)):
-                    remainder[i + j] ^= self.multiply(generator[j], factor)
+                # Apply vectorized GF multiplication and XOR update on the remainder
+                remainder[i+1:i+gen_len] ^= self.gf_mult_table[np.array(generator[1:], dtype=np.uint8), factor]
         
         return bytes(remainder[-ecc_words:])
-    def _multiply_polynomials(self, p1: list, p2: list) -> list:
-        """Multiply two polynomials in GF(256)"""
-        result = [0] * (len(p1) + len(p2) - 1)
-        for i in range(len(p1)):
-            for j in range(len(p2)):
-                result[i + j] ^= self.multiply(p1[i], p2[j])
-        return result
 
 def main():
     text = '677861663com.acme35584af52fa3-88d0-093b-6c14-b37ddafb59c528908608sg.com.dash.www0530329356521790265903SG.COM.NETS46968696003522G366948304B2AE13344004SG.SGQR209710339366720B439682.6366768027829126902859SG8236HELLO FOO2517Singapore3272B815'
