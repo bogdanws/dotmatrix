@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useEffect } from 'react';
 import { FaLongArrowAltLeft, FaLongArrowAltRight } from 'react-icons/fa';
 import IconButton from '../common/IconButton';
 import StageButton from '../common/StageButton';
@@ -30,6 +30,19 @@ export function QRGeneratorStages({
           JSON.stringify(previousMatrix.modules) === JSON.stringify(currentMatrix.modules),
     [previousMatrix, currentMatrix]
   );
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowLeft' && currentStage > 0) {
+        setCurrentStage(currentStage - 1);
+      } else if (e.key === 'ArrowRight' && currentStage < GENERATOR_STAGES.length - 1) {
+        setCurrentStage(currentStage + 1);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [currentStage, setCurrentStage]);
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

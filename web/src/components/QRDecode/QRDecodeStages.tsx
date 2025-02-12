@@ -4,6 +4,7 @@ import StageButton from '../common/StageButton';
 import AnimatedQRCanvas from '../common/AnimatedQRCanvas';
 import { DECODE_STAGES } from '../../constants/qr';
 import { QRStageContent } from '../../types/qr';
+import { useEffect } from 'react';
 
 interface QRDecodeStagesProps {
   currentStage: number;
@@ -60,6 +61,19 @@ export function QRDecodeStages({
         return null;
     }
   };
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowLeft' && currentStage > 0) {
+        setCurrentStage(currentStage - 1);
+      } else if (e.key === 'ArrowRight' && currentStage < DECODE_STAGES.length - 1) {
+        setCurrentStage(currentStage + 1);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [currentStage, setCurrentStage]);
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
