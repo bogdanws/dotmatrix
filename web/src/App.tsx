@@ -3,6 +3,8 @@ import { QRGenerator } from './components/QRGenerator'
 import { QRDecode } from './components/QRDecode'
 import { ErrorProvider } from './context/ErrorContext'
 import { BrowserRouter, Routes, Route, NavLink, useLocation, Navigate } from 'react-router-dom'
+import IconButton from './components/common/IconButton'
+import { FaGithub } from 'react-icons/fa'
 
 function AnimatedRoutes() {
   const location = useLocation();
@@ -55,7 +57,19 @@ function App() {
         <main className="min-h-screen min-w-full flex flex-col items-center bg-gradient-to-br from-gray-100 to-gray-200">
           <div className="container mx-auto px-4 py-12">
             <header className="mb-8 text-center">
-              <h1 className="text-4xl font-extrabold text-gray-900">DotMatrix</h1>
+              <div className="flex items-center justify-center gap-4 mb-2">
+                <h1 className="text-4xl font-extrabold text-gray-900">DotMatrix</h1>
+                <a 
+                  href="https://github.com/bogdanws/dotmatrix" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  aria-label="View project on GitHub"
+                >
+                  <IconButton className="bg-gray-800 hover:bg-gray-700">
+                    <FaGithub className="w-5 h-5" />
+                  </IconButton>
+                </a>
+              </div>
               <p className="text-gray-600">Step by Step QR Code Generator & Decoder</p>
             </header>
             <div className="flex justify-center space-x-4 mb-8">
